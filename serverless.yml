@@ -5,18 +5,18 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs8.10
+  runtime: nodejs12.x
 
   iamRoleStatements:
     - Effect: Allow
       Action:
-        - dynamodb.PutItem
-        - dynamodb.GetItem
+        - dynamodb:PutItem
+        - dynamodb:GetItem
       Resource:
         - arn:aws:dynamodb:#{AWS::Region}:#{AWS::AccountId}:table/ordersTable
     - Effect: Allow
       Action:
-        - kinesis::PutRecord
+        - kinesis:PutRecord
       Resource:
         - arn:aws:kinesis:#{AWS::Region}:#{AWS::AccountId}:stream/order-events
 
@@ -30,32 +30,18 @@ functions:
     environment:
       orderTableName: ordersTable
       orderStreamName: order-events
-  orderFulfillment:
-    handler: handler.orderFulfillment
-    events:
-      - http:
-          path: /order/fulfill
-          method: post
-        environment:
-          orderTableName: orderTable
-          orderStreamName: order-events
-  notifyCakeProducer:
-    handler: handler.notifyCakeProducer
-    events:
-      - stream:
-          arn: arn:aws:kinesis:#{AWS:Region}:#{AWS:AccountId}:stream/order-events
 
-resource:
+resources:
   Resources:
-    orderEventStream:
+    orderEventsStream:
       Type: AWS::Kinesis::Stream
       Properties:
         Name: order-events
         ShardCount: 1
     orderTable:
       Type: AWS::DynamoDB::Table
-      Properties::
-        TableName: orderTable
+      Properties:
+        TableName: ordersTable
         AttributeDefinitions:
           - AttributeName: "orderId"
             AttributeType: "S"
@@ -63,4 +49,3 @@ resource:
           - AttributeName: "orderId"
             KeyType: "HASH"
         BillingMode: PAY_PER_REQUEST
-
