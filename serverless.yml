@@ -19,6 +19,21 @@ provider:
         - kinesis:PutRecord
       Resource:
         - arn:aws:kinesis:#{AWS::Region}:#{AWS::AccountId}:stream/order-events
+    - Effect: Allow
+      Action:
+        - ses:SendEmail
+      Resource:
+        - "*"
+      Condition:
+        StringEquals:
+          ses:FromAddress:
+            - sj+cakeordering@gmail.com
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource:
+        - arn:aws:sqs:#{AWS::Region}:#{AWS::AccountId}:deliveryServiceQueue
+        - arn:aws:sqs:#{AWS::Region}:#{AWS::AccountId}:customerServiceQueue
 
 functions:
   createOrder:
@@ -39,6 +54,47 @@ functions:
     environment:
       orderTableName: ordersTable
       orderStreamName: order-events
+  notifyExternalParties:
+    handler: handler.notifyExternalParties
+    events:
+      - stream:
+          arn: arn:aws:kinesis:#{AWS::Region}:#{AWS::AccountId}:stream/order-events
+    environment:
+      region: ${self:provider.region}
+      cakeProducerEmail: sj+cakeproducer@gmail.com
+      orderingSystemEmail: sj+cakeordering@gmail.com
+      deliveryCompanyQueue:
+        Ref: deliveryServiceQueue
+      orderTableName: ordersTable
+  notifyDeliveryCompany:
+    handler: handler.notifyDeliveryCompany
+    events:
+      - sqs: 
+          arn:      
+            Fn::GetAtt:
+              - deliveryServiceQueue
+              - Arn
+          batchSize: 1
+  orderDelivered:
+    handler: handler.orderDelivered
+    events:
+      - http:
+          path: /order/delivered
+          method: post
+    environment:
+      region: ${self:provider.region}
+      orderTableName: ordersTable
+      customerServiceQueue:
+        Ref: customerServiceQueue
+  notifyCustomerService:
+    handler: handler.notifyCustomerService
+    events:
+      - sqs: 
+          arn:      
+            Fn::GetAtt:
+              - customerServiceQueue
+              - Arn
+          batchSize: 1
 
 resources:
   Resources:
@@ -58,3 +114,12 @@ resources:
           - AttributeName: "orderId"
             KeyType: "HASH"
         BillingMode: PAY_PER_REQUEST
+    deliveryServiceQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: deliveryServiceQueue
+    customerServiceQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: customerServiceQueue
+
